@@ -165,7 +165,7 @@ a{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
     </svg>
     <h1>Slip Ledger</h1>
     <p class="sub">Enter your passcode to continue.</p>
-    <p class="sub num" style="font-size:11px;color:var(--faint);margin:-20px 0 22px">build 2026-07-19d</p>
+    <p class="sub num" style="font-size:11px;color:var(--faint);margin:-20px 0 22px">build 2026-07-19e</p>
     <label for="pw">Passcode</label>
     <input type="password" id="pw" autocomplete="current-password"
            onkeydown="if(event.key==='Enter')unlock()">
@@ -557,8 +557,9 @@ async function runScan(files){
     while(cursor<files.length && !abortScan){
       const i = cursor++;
       const file = files[i];
+      let img = null;
       try{
-        const img = await compress(file);
+        img = await compress(file);
         const gap = cfg.gap - (Date.now()-lastSend);
         if(gap>0) await sleep(gap);
         lastSend = Date.now();
@@ -573,8 +574,9 @@ async function runScan(files){
         });
       }catch(err){
         failed++;
-        queue.push({ thumb:'', channel:'Unknown', date:todayISO(), time:'00:00',
-          amount:0, ref:'', rawText:'Could not read: '+err.message, name:file.name, bad:true });
+        queue.push({ thumb: img?img.thumb:'', channel:'Unknown', date:todayISO(), time:'00:00',
+          amount:0, ref:'', rawText:'Could not read: '+err.message,
+          err: err.message, name:file.name, bad:true });
       }
       done++; setProg(); renderQueue();
     }
@@ -598,26 +600,44 @@ function guessChannel(raw){
   return 'Thai QR Payment';
 }
 
-function compress(file, maxW=1000){
-  return new Promise((resolve,reject)=>{
-    const timer=setTimeout(()=>reject(new Error('image_timeout')),15000);
+async function compress(file, maxW=1000){
+  const src = await decodeImage(file);
+  const iw = src.width, ih = src.height;
+  if(!iw || !ih) throw new Error('image has no size');
+
+  let w = iw, h = ih;
+  if(w > maxW){ h = Math.round(h * maxW / w); w = maxW; }
+
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  c.getContext('2d').drawImage(src, 0, 0, w, h);
+
+  const th = document.createElement('canvas');
+  th.width = 88; th.height = 108;
+  const tc = th.getContext('2d');
+  // cover-crop so the thumbnail is not distorted
+  const scale = Math.max(88/iw, 108/ih);
+  const dw = iw*scale, dh = ih*scale;
+  tc.drawImage(src, (88-dw)/2, (108-dh)/2, dw, dh);
+
+  if(src.close) src.close();
+  return { b64: c.toDataURL('image/jpeg',0.72).split(',')[1],
+           thumb: th.toDataURL('image/jpeg',0.5) };
+}
+
+/** Safari cannot build an Image() from HEIC, but createImageBitmap handles it. */
+async function decodeImage(file){
+  if(typeof createImageBitmap === 'function'){
+    try{ return await createImageBitmap(file); }
+    catch(e){ /* fall through to Image() */ }
+  }
+  return await new Promise((resolve,reject)=>{
     const url=URL.createObjectURL(file);
+    const timer=setTimeout(()=>{ URL.revokeObjectURL(url); reject(new Error('image timed out')); },20000);
     const img=new Image();
-    img.onload=()=>{
-      clearTimeout(timer);
-      let w=img.width,h=img.height;
-      if(!w||!h){ URL.revokeObjectURL(url); return reject(new Error('bad_image')); }
-      if(w>maxW){ h=Math.round(h*maxW/w); w=maxW; }
-      const c=document.createElement('canvas'); c.width=w; c.height=h;
-      c.getContext('2d').drawImage(img,0,0,w,h);
-      const full=c.toDataURL('image/jpeg',0.72);
-      const t=document.createElement('canvas'); t.width=88; t.height=108;
-      t.getContext('2d').drawImage(img,0,0,88,108);
-      URL.revokeObjectURL(url);
-      resolve({ b64: full.split(',')[1], thumb: t.toDataURL('image/jpeg',0.5) });
-    };
+    img.onload=()=>{ clearTimeout(timer); URL.revokeObjectURL(url); resolve(img); };
     img.onerror=()=>{ clearTimeout(timer); URL.revokeObjectURL(url);
-      reject(new Error('unsupported image (HEIC? try Settings > Camera > Most Compatible)')); };
+      reject(new Error(`cannot decode ${file.type||'file'} — set iPhone Camera to "Most Compatible"`)); };
     img.src=url;
   });
 }
@@ -635,7 +655,7 @@ function renderQueue(){
       (q.thumb?`<img src="${q.thumb}" alt="">`:`<img alt="">`) +
       `<span class="grow">
          <span class="amt ${q.bad?'warn':''}">${q.bad?'Needs review':money(q.amount)}</span>
-         <span class="meta">${esc(q.date)} ${esc(q.time)} · ${esc(q.channel)}</span>
+         <span class="meta">${q.err?esc(q.err):esc(q.date)+' '+esc(q.time)+' · '+esc(q.channel)}</span>
        </span><span class="chev">›</span>`;
     b.onclick=()=>openEdit(i);
     box.appendChild(b);
