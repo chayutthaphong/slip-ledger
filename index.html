@@ -404,12 +404,12 @@ a{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
 <script>
 /* ─────────────── config ─────────────── */
 // Replace with your own Apps Script Web App URL after deploying.
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRGllRro86tuTXcjXSwgAb___hP4C2uaGayFcm_pJzeAQBV4NzSYSpvXuaQaAsKUMM/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwd9fHGydwz3ETETuShol0BsLWieXA7ZLYwOr2URwc3IgsEtQEYdaQcoGXVbQxLUKE1/exec';
 
 const DEFAULTS = { conc: 2, gap: 4000 };
 const CHANNELS = ['Thai QR Payment','Credit Card (EDC)','Cash','Unknown'];
 
-let token = sessionStorage.getItem('slipToken') || '';
+let token = (function(){ try{ return sessionStorage.getItem('slipToken')||''; }catch(e){ return ''; } })();
 let rows = [];            // saved entries from the sheet
 let queue = [];           // scanned, not yet saved
 let editIdx = -1;
@@ -455,12 +455,17 @@ async function api(payload,tries){
         body:JSON.stringify(Object.assign({token},payload)),
         redirect:'follow'
       });
-      const out = await res.json();
-      if(out.error==='unauthorized'){ lock(); throw new Error('Passcode rejected'); }
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      let out;
+      try{ out = await res.json(); }
+      catch(e){ throw new Error('Server did not return JSON — redeploy the Web App.'); }
+
+      if(out.error==='unauthorized'){ const e=new Error('Passcode rejected'); e.fatal=true; throw e; }
       if(out.error) throw new Error(out.error);
       return out;
     }catch(err){
-      const retryable = /gemini_failed|429|503|Failed to fetch|NetworkError/i.test(err.message||'');
+      if(err.fatal) throw err;
+      const retryable = /gemini_failed|429|50\d|Failed to fetch|NetworkError|Load failed/i.test(err.message||'');
       if(i===tries-1 || !retryable) throw err;
       await sleep(wait + Math.random()*300); wait*=2;
     }
@@ -469,30 +474,52 @@ async function api(payload,tries){
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 
 /* ─────────────── auth ─────────────── */
+function store(k,v){ try{ sessionStorage.setItem(k,v); }catch(e){} }
+function unstore(k){ try{ sessionStorage.removeItem(k); }catch(e){} }
+
 async function unlock(){
-  const pw = $('pw').value.trim();
-  if(!pw) return;
-  if(SCRIPT_URL.startsWith('PASTE_')){ $('lockmsg').textContent='Set SCRIPT_URL in index.html first.'; return; }
-  const btn=$('unlockBtn'); btn.disabled=true; $('lockmsg').textContent='Checking…';
-  token = pw;
+  const btn=$('unlockBtn');
   try{
-    await api({action:'ping'},1);
-    sessionStorage.setItem('slipToken',pw);
+    const pw = $('pw').value.trim();
+    if(!pw){ $('lockmsg').textContent='Enter your passcode.'; return; }
+    if(SCRIPT_URL.startsWith('PASTE_')){ $('lockmsg').textContent='Set SCRIPT_URL in index.html first.'; return; }
+
+    btn.disabled=true; $('lockmsg').textContent='Checking…';
+    token = pw;
+
+    try{
+      await api({action:'ping'},1);
+    }catch(err){
+      token='';
+      const m = err && err.message ? err.message : String(err);
+      $('lockmsg').textContent =
+        m==='Passcode rejected'            ? 'Wrong passcode.' :
+        /server_not_configured/.test(m)    ? 'Server is missing APP_TOKEN. Set it in Script Properties.' :
+        /Failed to fetch|NetworkError|Load failed/i.test(m)
+                                           ? 'Cannot reach the server. Check the deployment is set to "Anyone".' :
+        'Sign-in failed: ' + m;
+      return;
+    }
+
+    store('slipToken',pw);
     $('lockmsg').textContent=''; $('pw').value='';
     $('lock').hidden=true;
     await refresh();
     go('scan');
   }catch(err){
     token='';
-    $('lockmsg').textContent = err.message==='Passcode rejected' ? 'Wrong passcode.' : 'Cannot reach the server.';
+    $('lock').hidden=false;
+    $('lockmsg').textContent='Sign-in failed: ' + (err && err.message ? err.message : String(err));
+  }finally{
+    btn.disabled=false;
   }
-  btn.disabled=false;
 }
 
 function lock(){
   token=''; rows=[]; queue=[];
-  sessionStorage.removeItem('slipToken');
+  unstore('slipToken');
   $('lock').hidden=false;
+  const b=$('unlockBtn'); if(b) b.disabled=false;
 }
 
 /* ─────────────── nav ─────────────── */
