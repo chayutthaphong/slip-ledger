@@ -12,17 +12,6 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
-<script>
-window.addEventListener('error', function(e){
-  var el=document.getElementById('lockmsg');
-  if(el) el.textContent='Script error: '+(e.message||'')+' @'+(e.lineno||'?');
-});
-window.addEventListener('unhandledrejection', function(e){
-  var el=document.getElementById('lockmsg');
-  var r=e.reason;
-  if(el) el.textContent='Unhandled: '+((r&&r.message)?r.message:String(r));
-});
-</script>
 <script src="chart.umd.js"></script>
 <style>
 :root{
@@ -33,6 +22,7 @@ window.addEventListener('unhandledrejection', function(e){
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
 }
 *{-webkit-tap-highlight-color:transparent;box-sizing:border-box}
+[hidden]{display:none!important}
 html{-webkit-text-size-adjust:100%}
 body{font-family:var(--sans);margin:0;background:var(--paper);color:var(--ink);
   padding:calc(10px + env(safe-area-inset-top)) 14px calc(84px + env(safe-area-inset-bottom));
@@ -175,13 +165,12 @@ a{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
     </svg>
     <h1>Slip Ledger</h1>
     <p class="sub">Enter your passcode to continue.</p>
-    <p class="sub num" style="font-size:11px;color:var(--faint);margin:-20px 0 22px">build 2026-07-19c</p>
+    <p class="sub num" style="font-size:11px;color:var(--faint);margin:-20px 0 22px">build 2026-07-19d</p>
     <label for="pw">Passcode</label>
     <input type="password" id="pw" autocomplete="current-password"
            onkeydown="if(event.key==='Enter')unlock()">
     <button class="wide" id="unlockBtn" onclick="unlock()">Unlock</button>
     <div id="lockmsg" class="msg err"></div>
-    <pre id="trace" hidden style="margin-top:14px;max-height:200px"></pre>
   </div>
 </div>
 
@@ -457,12 +446,6 @@ function toast(msg){
 }
 
 /* ─────────────── api ─────────────── */
-function TRACE(m){
-  try{
-    var el=document.getElementById('trace');
-    if(el){ el.hidden=false; el.textContent += m + '\n'; }
-  }catch(e){}
-}
 async function api(payload,tries){
   tries = tries==null?3:tries;
   let wait = 700;
@@ -520,13 +503,11 @@ async function unlock(){
       return;
     }
 
-    TRACE('ping ok');
     store('slipToken',pw);
     $('lockmsg').textContent=''; $('pw').value='';
     $('lock').hidden=true;
     go('scan');
-    TRACE('go(scan) done, lockHidden='+$('lock').hidden);
-    refresh().then(function(){ TRACE('refresh done, lockHidden='+$('lock').hidden); });
+    refresh();
   }catch(err){
     const m = err && err.message ? err.message : String(err);
     $('lockmsg').textContent='Sign-in failed: ' + m;
@@ -537,7 +518,6 @@ async function unlock(){
 }
 
 function lock(){
-  try{ TRACE('lock() called: '+new Error().stack.split('\n').slice(1,3).join(' | ')); }catch(e){}
   token=''; rows=[]; queue=[];
   unstore('slipToken');
   $('lock').hidden=false;
