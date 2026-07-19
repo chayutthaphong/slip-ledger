@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ledger">
+<meta name="theme-color" content="#FAF8F4">
+<meta name="referrer" content="no-referrer">
+<title>Slip Ledger</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<script src="chart.umd.js"></script>
+<style>
+:root{
+  --ink:#12100E; --paper:#FAF8F4; --card:#FFFFFF; --rule:#E4DFD4;
+  --mut:#7A756C; --faint:#A9A399;
+  --qr:#1B6E4A; --cc:#B4472E; --unk:#8A857C;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+}
+*{-webkit-tap-highlight-color:transparent;box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{font-family:var(--sans);margin:0;background:var(--paper);color:var(--ink);
+  padding:calc(10px + env(safe-area-inset-top)) 14px calc(84px + env(safe-area-inset-bottom));
+  font-size:15px;line-height:1.45}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.eyebrow{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.card{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:16px;margin-bottom:12px}
+.card.flush{padding:0;overflow:hidden}
+
+.stub{position:relative;background:var(--card);border:1px solid var(--rule);border-bottom:0;
+  border-radius:10px 10px 0 0;padding:18px 18px 20px;margin-bottom:24px}
+.stub::after{content:"";position:absolute;left:-1px;right:-1px;bottom:-10px;height:11px;pointer-events:none;
+  background:var(--card);
+  -webkit-mask:repeating-linear-gradient(135deg,#000 0 6px,transparent 6px 12px);
+  mask:repeating-linear-gradient(135deg,#000 0 6px,transparent 6px 12px);
+  border-left:1px solid var(--rule);border-right:1px solid var(--rule)}
+.stub-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;gap:10px}
+.dash{border-top:1px dashed var(--rule);margin:14px 0}
+.tot{display:flex;justify-content:space-between;align-items:flex-end;gap:10px}
+.tot .lbl{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--mut);padding-bottom:4px;white-space:nowrap}
+.tot .val{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:33px;font-weight:600;
+  letter-spacing:-.035em;line-height:1}
+.subs{display:flex;gap:18px;margin-top:16px}
+.subs>div{flex:1;min-width:0}
+.subs .k{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:700}
+.subs .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:16px;font-weight:600;margin-top:3px}
+
+label{display:block;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--mut);margin:0 0 5px}
+input,select{width:100%;padding:11px 12px;font-size:16px;font-family:var(--sans);color:var(--ink);
+  background:var(--paper);border:1px solid var(--rule);border-radius:8px;margin:0 0 12px;
+  appearance:none;-webkit-appearance:none}
+input[type=date],input[type=time],input[type=number],input[type=password]{font-family:var(--mono)}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--ink);outline-offset:-1px}
+input:focus,select:focus{background:#fff}
+select{background-image:linear-gradient(45deg,transparent 50%,var(--mut) 50%),
+  linear-gradient(135deg,var(--mut) 50%,transparent 50%);
+  background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat}
+button{font-family:var(--sans);font-size:15px;font-weight:600;padding:13px 16px;
+  border:1px solid var(--ink);border-radius:8px;background:var(--ink);color:var(--paper);cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--rule)}
+button.ghost:active{background:var(--paper)}
+button:disabled{opacity:.35;cursor:not-allowed}
+button:active:not(:disabled){transform:translateY(1px)}
+.row{display:flex;gap:10px}.row>*{flex:1;min-width:0}
+.wide{width:100%}
+.hint{font-size:11px;color:var(--faint);margin:-6px 0 12px;line-height:1.5}
+
+.seg{display:flex;border:1px solid var(--rule);border-radius:8px;overflow:hidden;
+  margin-bottom:14px;background:var(--paper)}
+.seg button{flex:1;border:0;border-radius:0;background:transparent;color:var(--mut);font-size:11px;
+  font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:11px 3px}
+.seg button+button{border-left:1px solid var(--rule)}
+.seg button.on{background:var(--ink);color:var(--paper)}
+
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+  text-align:left;padding:0 0 8px;border-bottom:1px solid var(--rule)}
+td{padding:10px 0;border-bottom:1px solid #F1EDE5;vertical-align:middle}
+tr:last-child td{border-bottom:0}
+.r{text-align:right}
+td.r{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.empty{color:var(--faint);text-align:center;padding:28px 0;font-size:14px}
+.del{border:0;background:none;color:var(--cc);font-size:11px;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;padding:4px 0}
+
+.tag{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--mut);white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:2px;flex:0 0 auto}
+.d-qr{background:var(--qr)}.d-cc{background:var(--cc)}.d-un{background:var(--unk)}
+
+.q{display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid #F1EDE5;
+  cursor:pointer;text-align:left;width:100%;background:none;border-left:0;border-right:0;border-top:0;
+  color:var(--ink);font-weight:400;padding-left:0;padding-right:0}
+.q:last-of-type{border-bottom:0}
+.q img{width:44px;height:54px;object-fit:cover;border-radius:5px;background:var(--paper);
+  border:1px solid var(--rule);flex:0 0 auto}
+.q .amt{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:17px;font-weight:600}
+.q .amt.warn{color:var(--cc);font-size:14px}
+.q .meta{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:3px}
+.q .grow{flex:1;min-width:0}
+.chev{color:var(--faint);font-size:17px;flex:0 0 auto}
+
+.bar{height:3px;background:var(--rule);border-radius:2px;overflow:hidden;margin:14px 0 8px}
+.bar i{display:block;height:100%;background:var(--ink);width:0;transition:width .3s ease}
+.pstat{font-family:var(--mono);font-size:11px;color:var(--mut)}
+
+.nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:rgba(250,248,244,.93);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--rule);
+  padding:8px 6px calc(8px + env(safe-area-inset-bottom));z-index:20}
+.nav button{flex:1;background:none;border:0;color:var(--faint);font-size:9px;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;padding:4px 2px;display:flex;flex-direction:column;
+  align-items:center;gap:5px}
+.nav button.on{color:var(--ink)}
+.nav svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.6;
+  stroke-linecap:round;stroke-linejoin:round}
+
+#lock{position:fixed;inset:0;background:var(--paper);z-index:100;display:flex;align-items:center;
+  justify-content:center;padding:28px}
+#lock .box{width:100%;max-width:330px}
+#lock h1{font-size:22px;font-weight:600;letter-spacing:-.02em;margin:0 0 4px}
+#lock .sub{font-size:13px;color:var(--mut);margin:0 0 26px}
+.mark{width:36px;height:44px;margin-bottom:20px;display:block}
+
+.hd{display:flex;justify-content:space-between;align-items:baseline;margin:0 0 14px;gap:10px}
+.note{font-size:12px;color:var(--mut);line-height:1.55}
+.chart-wrap{position:relative;height:186px}
+details summary{font-size:11px;color:var(--mut);cursor:pointer;letter-spacing:.04em}
+pre{font-family:var(--mono);font-size:10px;white-space:pre-wrap;word-break:break-all;
+  color:var(--mut);max-height:180px;overflow:auto;margin:10px 0 0;
+  background:var(--paper);padding:10px;border-radius:6px}
+.msg{font-size:13px;margin-top:12px;font-weight:500;line-height:1.5}
+.msg.err{color:var(--cc)}.msg.ok{color:var(--qr)}
+a{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.toast{position:fixed;left:50%;transform:translateX(-50%) translateY(-160%);
+  top:calc(14px + env(safe-area-inset-top));background:var(--ink);color:var(--paper);
+  padding:11px 18px;border-radius:8px;font-size:13px;font-weight:600;z-index:200;
+  transition:transform .28s cubic-bezier(.2,.9,.3,1);max-width:88vw;text-align:center}
+.toast.show{transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+@media print{
+  .nav,button,.noprint,#p-scan,#p-set,#lock,.seg{display:none!important}
+  body{padding:0;background:#fff}
+  .card,.stub{break-inside:avoid;border-color:#ccc}
+}
+</style>
+</head>
+<body>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<div id="lock">
+  <div class="box">
+    <svg class="mark" viewBox="0 0 36 44" aria-hidden="true">
+      <path d="M3 2h30v33l-5 4-5-4-5 4-5-4-5 4-5-4V2z" stroke="#12100E" stroke-width="2"
+            stroke-linejoin="round" fill="none"/>
+      <path d="M10 12h16M10 19h16M10 26h9" stroke="#12100E" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <h1>Slip Ledger</h1>
+    <p class="sub">Enter your passcode to continue.</p>
+    <label for="pw">Passcode</label>
+    <input type="password" id="pw" autocomplete="current-password"
+           onkeydown="if(event.key==='Enter')unlock()">
+    <button class="wide" id="unlockBtn" onclick="unlock()">Unlock</button>
+    <div id="lockmsg" class="msg err"></div>
+  </div>
+</div>
+
+<!-- ============ SCAN ============ -->
+<div id="p-scan" hidden>
+  <div class="card">
+    <div class="hd"><span class="eyebrow">Capture</span>
+      <span class="eyebrow num" id="todayCount">—</span></div>
+    <p class="note" style="margin:0 0 14px">Photograph slips or pick them from your library. Several at once is fine.</p>
+    <input type="file" accept="image/*" multiple id="file" hidden>
+    <button class="wide" id="pickBtn" onclick="document.getElementById('file').click()">Scan slips</button>
+    <div id="prog" hidden>
+      <div class="bar"><i id="bar"></i></div>
+      <div class="pstat" id="pstat"></div>
+      <button class="wide ghost" style="margin-top:10px" onclick="cancelScan()">Stop</button>
+    </div>
+  </div>
+
+  <div class="card" id="queueCard" hidden>
+    <div class="hd">
+      <span class="eyebrow">Pending — <span id="qn">0</span></span>
+      <button class="ghost" style="padding:6px 11px;font-size:12px" onclick="clearQ()">Discard</button>
+    </div>
+    <div id="queue"></div>
+    <div class="dash"></div>
+    <div class="tot" style="margin-bottom:16px">
+      <span class="lbl">Batch total</span>
+      <span class="val num" id="qtot" style="font-size:23px">0.00</span>
+    </div>
+    <button class="wide" id="saveAll" onclick="saveAll()">Save to sheet</button>
+  </div>
+
+  <div class="card">
+    <div class="hd"><span class="eyebrow">Manual entry</span></div>
+    <div class="row">
+      <div><label for="m-date">Date</label><input type="date" id="m-date"></div>
+      <div><label for="m-time">Time</label><input type="time" id="m-time"></div>
+    </div>
+    <label for="m-amount">Amount (THB)</label>
+    <input type="number" step="0.01" inputmode="decimal" id="m-amount" placeholder="0.00">
+    <label for="m-channel">Payment method</label>
+    <select id="m-channel">
+      <option>Cash</option><option>Thai QR Payment</option>
+      <option>Credit Card (EDC)</option><option>Unknown</option>
+    </select>
+    <button class="wide ghost" onclick="saveManual()">Add entry</button>
+    <div id="manmsg" class="msg"></div>
+  </div>
+</div>
+
+<!-- ============ REVIEW ============ -->
+<div id="p-edit" hidden>
+  <div class="card flush"><img id="eimg" alt="Slip being reviewed" style="width:100%;display:block"></div>
+  <div class="card">
+    <div class="hd"><span class="eyebrow">Review entry</span>
+      <span class="eyebrow num" id="ePos"></span></div>
+    <label for="e-channel">Payment method</label>
+    <select id="e-channel">
+      <option>Thai QR Payment</option><option>Credit Card (EDC)</option>
+      <option>Cash</option><option>Unknown</option>
+    </select>
+    <div class="row">
+      <div><label for="e-date">Date</label><input type="date" id="e-date"></div>
+      <div><label for="e-time">Time</label><input type="time" id="e-time"></div>
+    </div>
+    <label for="e-amount">Amount (THB)</label>
+    <input type="number" step="0.01" inputmode="decimal" id="e-amount">
+    <label for="e-ref">Reference</label><input id="e-ref">
+    <details><summary>Show recognised text</summary><pre id="e-raw"></pre></details>
+    <div class="row" style="margin-top:16px">
+      <button class="ghost" onclick="dropEntry()">Remove</button>
+      <button onclick="applyEdit()">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TODAY ============ -->
+<div id="p-today" hidden>
+  <div class="stub">
+    <div class="stub-head">
+      <span class="eyebrow">Day total</span>
+      <span class="eyebrow num" id="todayLabel">—</span>
+    </div>
+    <input type="date" id="pickDay" onchange="renderToday()" style="margin-bottom:0">
+    <div class="dash"></div>
+    <div class="tot">
+      <span class="lbl">THB</span>
+      <span class="val" id="sum">0.00</span>
+    </div>
+    <div class="subs">
+      <div><div class="k">Slips</div><div class="v" id="cnt">0</div></div>
+      <div><div class="k">QR</div><div class="v" id="tQr">0.00</div></div>
+      <div><div class="k">Card</div><div class="v" id="tCc">0.00</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="hd"><span class="eyebrow">Transactions</span></div>
+    <table id="tbl"></table>
+  </div>
+</div>
+
+<!-- ============ REPORT ============ -->
+<div id="p-dash" hidden>
+  <div class="card noprint">
+    <div class="hd"><span class="eyebrow">Period</span></div>
+    <div class="seg" id="segPeriod">
+      <button data-p="daily" onclick="setPeriod('daily')">Daily</button>
+      <button data-p="weekly" onclick="setPeriod('weekly')">Weekly</button>
+      <button data-p="monthly" class="on" onclick="setPeriod('monthly')">Monthly</button>
+      <button data-p="custom" onclick="setPeriod('custom')">Custom</button>
+    </div>
+    <div id="anchorWrap">
+      <label for="anchor" id="anchorLbl">Month</label>
+      <input type="date" id="anchor" onchange="applyAnchor()">
+    </div>
+    <div id="customWrap" hidden>
+      <div class="row">
+        <div><label for="from">From</label><input type="date" id="from" onchange="applyAnchor()"></div>
+        <div><label for="to">To</label><input type="date" id="to" onchange="applyAnchor()"></div>
+      </div>
+    </div>
+    <p class="note num" id="rangeNote" style="margin:0 0 14px"></p>
+    <button class="wide" onclick="renderDash()">Run report</button>
+  </div>
+
+  <div id="repBody" hidden>
+    <div class="stub">
+      <div class="stub-head">
+        <span class="eyebrow" id="repTitle">Report</span>
+        <span class="eyebrow num" id="repRange"></span>
+      </div>
+      <div class="dash"></div>
+      <div class="tot">
+        <span class="lbl">Total THB</span>
+        <span class="val" id="kTotal">0.00</span>
+      </div>
+      <div class="subs">
+        <div><div class="k">Slips</div><div class="v" id="kCount">0</div></div>
+        <div><div class="k">Per slip</div><div class="v" id="kAvg">0.00</div></div>
+        <div><div class="k">Per day</div><div class="v" id="kDay">0.00</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd"><span class="eyebrow">Revenue over time</span>
+        <span class="eyebrow num" id="bestNote"></span></div>
+      <div class="chart-wrap"><canvas id="c1"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="hd"><span class="eyebrow">By hour of day</span>
+        <span class="eyebrow num" id="peakNote"></span></div>
+      <div class="chart-wrap"><canvas id="c2"></canvas></div>
+    </div>
+
+    <div class="card">
+      <div class="hd"><span class="eyebrow">Payment mix</span></div>
+      <table id="tCh"></table>
+    </div>
+
+    <div class="card">
+      <div class="hd"><span class="eyebrow">Breakdown</span></div>
+      <table id="tPeriod"></table>
+    </div>
+
+    <div class="card noprint">
+      <div class="hd"><span class="eyebrow">Export</span></div>
+      <div class="row">
+        <button class="ghost" onclick="exportCSV()">CSV</button>
+        <button class="ghost" onclick="window.print()">Print / PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SETTINGS ============ -->
+<div id="p-set" hidden>
+  <div class="card">
+    <div class="hd"><span class="eyebrow">Scan throughput</span></div>
+    <p class="note" style="margin:0 0 14px">
+      Gemini's free tier allows a limited number of requests per minute. Raise these only if your
+      quota allows it — the app backs off automatically when the limit is hit.
+    </p>
+    <label for="s-conc">Slips in flight at once</label>
+    <input type="number" id="s-conc" min="1" max="8" step="1">
+    <p class="hint">Free tier: 1–2. Paid tier: 4–6.</p>
+    <label for="s-gap">Minimum gap between requests (ms)</label>
+    <input type="number" id="s-gap" min="0" max="10000" step="100">
+    <p class="hint">Free tier at 15 requests/min: 4000. Paid tier: 0–500.</p>
+    <button class="wide ghost" onclick="saveSettings()">Save settings</button>
+    <div id="setmsg" class="msg"></div>
+  </div>
+
+  <div class="card">
+    <div class="hd"><span class="eyebrow">Estimated pace</span></div>
+    <table id="paceTbl"></table>
+  </div>
+
+  <div class="card">
+    <div class="hd"><span class="eyebrow">Data</span></div>
+    <table>
+      <tr><td>Entries loaded</td><td class="r" id="dCount">0</td></tr>
+      <tr><td>Earliest</td><td class="r" id="dFirst">—</td></tr>
+      <tr><td>Latest</td><td class="r" id="dLast">—</td></tr>
+    </table>
+    <button class="wide ghost" style="margin-top:14px" onclick="refresh()">Reload from sheet</button>
+  </div>
+
+  <div class="card">
+    <div class="hd"><span class="eyebrow">Session</span></div>
+    <p class="note" style="margin:0 0 14px">
+      The passcode is held in this browser only. Sign out on shared devices.
+    </p>
+    <button class="wide ghost" onclick="lock()">Sign out</button>
+  </div>
+</div>
+
+<nav class="nav">
+  <button data-nav="scan" class="on" onclick="go('scan')">
+    <svg viewBox="0 0 24 24"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><circle cx="12" cy="12" r="3"/></svg>
+    Scan</button>
+  <button data-nav="today" onclick="go('today')">
+    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+    Today</button>
+  <button data-nav="dash" onclick="go('dash')">
+    <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+    Report</button>
+  <button data-nav="set" onclick="go('set')">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+    Settings</button>
+</nav>
+
+<script>
+/* ─────────────── config ─────────────── */
+// Replace with your own Apps Script Web App URL after deploying.
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRGllRro86tuTXcjXSwgAb___hP4C2uaGayFcm_pJzeAQBV4NzSYSpvXuaQaAsKUMM/exec';
+
+const DEFAULTS = { conc: 2, gap: 4000 };
+const CHANNELS = ['Thai QR Payment','Credit Card (EDC)','Cash','Unknown'];
+
+let token = sessionStorage.getItem('slipToken') || '';
+let rows = [];            // saved entries from the sheet
+let queue = [];           // scanned, not yet saved
+let editIdx = -1;
+let period = 'monthly';
+let charts = {};
+let abortScan = false;
+let cfg = loadCfg();
+
+/* ─────────────── helpers ─────────────── */
+const $ = id => document.getElementById(id);
+const money = n => (Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const pad = n => String(n).padStart(2,'0');
+const todayISO = () => localISO(new Date());
+function localISO(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function parseISO(s){ const p=String(s).split('-'); return new Date(+p[0],+p[1]-1,+p[2]); }
+function dayDiff(a,b){ return Math.round((parseISO(b)-parseISO(a))/86400000); }
+function addDays(iso,n){ const d=parseISO(iso); d.setDate(d.getDate()+n); return localISO(d); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function chanClass(c){ c=String(c||'').toLowerCase();
+  if(c.includes('card')||c.includes('edc')) return 'd-cc';
+  if(c.includes('unknown')) return 'd-un'; return 'd-qr'; }
+
+function loadCfg(){
+  try{ return Object.assign({},DEFAULTS,JSON.parse(localStorage.getItem('slipCfg')||'{}')); }
+  catch(e){ return Object.assign({},DEFAULTS); }
+}
+
+let toastTimer;
+function toast(msg){
+  const t=$('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2600);
+}
+
+/* ─────────────── api ─────────────── */
+async function api(payload,tries){
+  tries = tries==null?3:tries;
+  let wait = 700;
+  for(let i=0;i<tries;i++){
+    try{
+      const res = await fetch(SCRIPT_URL,{
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'}, // avoids CORS preflight
+        body:JSON.stringify(Object.assign({token},payload)),
+        redirect:'follow'
+      });
+      const out = await res.json();
+      if(out.error==='unauthorized'){ lock(); throw new Error('Passcode rejected'); }
+      if(out.error) throw new Error(out.error);
+      return out;
+    }catch(err){
+      const retryable = /gemini_failed|429|503|Failed to fetch|NetworkError/i.test(err.message||'');
+      if(i===tries-1 || !retryable) throw err;
+      await sleep(wait + Math.random()*300); wait*=2;
+    }
+  }
+}
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+/* ─────────────── auth ─────────────── */
+async function unlock(){
+  const pw = $('pw').value.trim();
+  if(!pw) return;
+  if(SCRIPT_URL.startsWith('PASTE_')){ $('lockmsg').textContent='Set SCRIPT_URL in index.html first.'; return; }
+  const btn=$('unlockBtn'); btn.disabled=true; $('lockmsg').textContent='Checking…';
+  token = pw;
+  try{
+    await api({action:'ping'},1);
+    sessionStorage.setItem('slipToken',pw);
+    $('lockmsg').textContent=''; $('pw').value='';
+    $('lock').hidden=true;
+    await refresh();
+    go('scan');
+  }catch(err){
+    token='';
+    $('lockmsg').textContent = err.message==='Passcode rejected' ? 'Wrong passcode.' : 'Cannot reach the server.';
+  }
+  btn.disabled=false;
+}
+
+function lock(){
+  token=''; rows=[]; queue=[];
+  sessionStorage.removeItem('slipToken');
+  $('lock').hidden=false;
+}
+
+/* ─────────────── nav ─────────────── */
+function go(page){
+  ['scan','edit','today','dash','set'].forEach(p=>{ const el=$('p-'+p); if(el) el.hidden = (p!==page); });
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('on',b.dataset.nav===page));
+  window.scrollTo(0,0);
+  if(page==='today') renderToday();
+  if(page==='set') renderSettings();
+}
+
+/* ─────────────── scan ─────────────── */
+$('file').addEventListener('change', async e => {
+  const files = Array.from(e.target.files||[]);
+  e.target.value='';
+  if(!files.length) return;
+  await runScan(files);
+});
+
+async function runScan(files){
+  abortScan=false;
+  $('prog').hidden=false; $('pickBtn').disabled=true;
+  let done=0, failed=0;
+  const total=files.length;
+  const setProg=()=>{
+    $('bar').style.width = Math.round(done/total*100)+'%';
+    $('pstat').textContent = `${done} of ${total} read` + (failed?` · ${failed} failed`:'');
+  };
+  setProg();
+
+  let cursor=0, lastSend=0;
+  const worker = async () => {
+    while(cursor<files.length && !abortScan){
+      const i = cursor++;
+      const file = files[i];
+      try{
+        const img = await compress(file);
+        const gap = cfg.gap - (Date.now()-lastSend);
+        if(gap>0) await sleep(gap);
+        lastSend = Date.now();
+        const out = await api({action:'scan', imageBase64:img.b64, mimeType:'image/jpeg'});
+        const d = out.data;
+        queue.push({
+          thumb: img.thumb,
+          channel: CHANNELS.includes(d.channel)?d.channel:guessChannel(d.channel),
+          date: d.date||todayISO(), time: d.time||'00:00',
+          amount: Number(d.amount)||0, ref: d.ref||'', rawText: d.rawText||'',
+          name: file.name
+        });
+      }catch(err){
+        failed++;
+        queue.push({ thumb:'', channel:'Unknown', date:todayISO(), time:'00:00',
+          amount:0, ref:'', rawText:'Could not read: '+err.message, name:file.name, bad:true });
+      }
+      done++; setProg(); renderQueue();
+    }
+  };
+
+  const n = Math.max(1, Math.min(8, cfg.conc));
+  await Promise.all(Array.from({length:n}, worker));
+
+  $('prog').hidden=true; $('pickBtn').disabled=false;
+  $('bar').style.width='0';
+  toast(abortScan ? `Stopped — ${done} read` : (failed ? `${done-failed} read, ${failed} need attention` : `${done} slips read`));
+}
+
+function cancelScan(){ abortScan=true; }
+
+function guessChannel(raw){
+  const c=String(raw||'').toLowerCase();
+  if(c.includes('card')||c.includes('edc')||c.includes('visa')||c.includes('master')) return 'Credit Card (EDC)';
+  if(c.includes('cash')) return 'Cash';
+  if(!c||c.includes('unknown')) return 'Unknown';
+  return 'Thai QR Payment';
+}
+
+function compress(file, maxW=1000){
+  return new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error('image_timeout')),15000);
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      clearTimeout(timer);
+      let w=img.width,h=img.height;
+      if(!w||!h){ URL.revokeObjectURL(url); return reject(new Error('bad_image')); }
+      if(w>maxW){ h=Math.round(h*maxW/w); w=maxW; }
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      const full=c.toDataURL('image/jpeg',0.72);
+      const t=document.createElement('canvas'); t.width=88; t.height=108;
+      t.getContext('2d').drawImage(img,0,0,88,108);
+      URL.revokeObjectURL(url);
+      resolve({ b64: full.split(',')[1], thumb: t.toDataURL('image/jpeg',0.5) });
+    };
+    img.onerror=()=>{ clearTimeout(timer); URL.revokeObjectURL(url);
+      reject(new Error('unsupported image (HEIC? try Settings > Camera > Most Compatible)')); };
+    img.src=url;
+  });
+}
+
+function renderQueue(){
+  const box=$('queue');
+  $('queueCard').hidden = queue.length===0;
+  $('qn').textContent = queue.length;
+  $('qtot').textContent = money(queue.reduce((s,q)=>s+(Number(q.amount)||0),0));
+  box.innerHTML='';
+  queue.forEach((q,i)=>{
+    const b=document.createElement('button');
+    b.className='q'; b.type='button';
+    b.innerHTML =
+      (q.thumb?`<img src="${q.thumb}" alt="">`:`<img alt="">`) +
+      `<span class="grow">
+         <span class="amt ${q.bad?'warn':''}">${q.bad?'Needs review':money(q.amount)}</span>
+         <span class="meta">${esc(q.date)} ${esc(q.time)} · ${esc(q.channel)}</span>
+       </span><span class="chev">›</span>`;
+    b.onclick=()=>openEdit(i);
+    box.appendChild(b);
+  });
+  $('saveAll').disabled = queue.length===0;
+}
+
+function clearQ(){
+  if(!queue.length) return;
+  if(!confirm('Discard all pending slips?')) return;
+  queue=[]; renderQueue();
+}
+
+/* ─────────────── review ─────────────── */
+function openEdit(i){
+  editIdx=i; const q=queue[i];
+  $('eimg').src = q.thumb || '';
+  $('eimg').style.display = q.thumb ? 'block' : 'none';
+  $('ePos').textContent = `${i+1} / ${queue.length}`;
+  $('e-channel').value = CHANNELS.includes(q.channel)?q.channel:'Unknown';
+  $('e-date').value=q.date; $('e-time').value=q.time;
+  $('e-amount').value=q.amount; $('e-ref').value=q.ref;
+  $('e-raw').textContent=q.rawText||'—';
+  go('edit');
+}
+
+function applyEdit(){
+  const q=queue[editIdx]; if(!q) return go('scan');
+  q.channel=$('e-channel').value;
+  q.date=$('e-date').value||todayISO();
+  q.time=$('e-time').value||'00:00';
+  q.amount=Number($('e-amount').value)||0;
+  q.ref=$('e-ref').value.trim();
+  q.bad = q.amount<=0;
+  renderQueue(); go('scan');
+}
+
+function dropEntry(){
+  if(editIdx>-1) queue.splice(editIdx,1);
+  renderQueue(); go('scan');
+}
+
+/* ─────────────── save ─────────────── */
+async function saveAll(){
+  if(!queue.length) return;
+  const bad = queue.filter(q=>!(Number(q.amount)>0)).length;
+  if(bad && !confirm(`${bad} slip(s) have no amount. Save anyway?`)) return;
+
+  const dupes = queue.filter(q=>q.ref && rows.some(r=>r.ref && r.ref===q.ref));
+  if(dupes.length && !confirm(`${dupes.length} slip(s) match a reference already in the sheet. Save anyway?`)) return;
+
+  const btn=$('saveAll'); btn.disabled=true; btn.textContent='Saving…';
+  try{
+    const out = await api({ action:'save_batch', rows: queue.map(q=>({
+      channel:q.channel, date:q.date, time:q.time,
+      amount:q.amount, ref:q.ref, rawText:q.rawText
+    }))});
+    rows = rows.concat(out.data);
+    queue=[]; renderQueue();
+    toast(`Saved ${out.data.length} entries`);
+    renderTodayCount();
+  }catch(err){ toast('Save failed: '+err.message); }
+  btn.disabled=false; btn.textContent='Save to sheet';
+}
+
+async function saveManual(){
+  const amt=Number($('m-amount').value);
+  if(!(amt>0)){ $('manmsg').className='msg err'; $('manmsg').textContent='Enter an amount above zero.'; return; }
+  $('manmsg').className='msg'; $('manmsg').textContent='Saving…';
+  try{
+    const out=await api({action:'save_entry', data:{
+      channel:$('m-channel').value, date:$('m-date').value||todayISO(),
+      time:$('m-time').value||'00:00', amount:amt, ref:'MANUAL'
+    }});
+    rows.push(out.data);
+    $('m-amount').value='';
+    $('manmsg').className='msg ok'; $('manmsg').textContent='Entry added.';
+    setTimeout(()=>$('manmsg').textContent='',2500);
+    renderTodayCount();
+  }catch(err){ $('manmsg').className='msg err'; $('manmsg').textContent=err.message; }
+}
+
+async function delRow(id){
+  if(!confirm('Delete this entry?')) return;
+  const keep=rows.slice();
+  rows=rows.filter(r=>r.id!==id);
+  renderToday();
+  try{ await api({action:'delete', id}); toast('Entry deleted'); }
+  catch(err){ rows=keep; renderToday(); toast('Delete failed'); }
+}
+
+async function refresh(){
+  try{
+    const out=await api({action:'fetch_data'});
+    rows=out.data||[];
+    renderTodayCount();
+  }catch(err){ toast('Could not load: '+err.message); }
+}
+
+/* ─────────────── today ─────────────── */
+function renderTodayCount(){
+  const n=rows.filter(r=>r.date===todayISO()).length;
+  $('todayCount').textContent = n ? `${n} today` : '—';
+}
+
+function renderToday(){
+  if(!$('pickDay').value) $('pickDay').value=todayISO();
+  const day=$('pickDay').value;
+  const list=rows.filter(r=>r.date===day).sort((a,b)=>b.time.localeCompare(a.time));
+  const total=list.reduce((s,r)=>s+r.amount,0);
+  const qr=list.filter(r=>chanClass(r.channel)==='d-qr').reduce((s,r)=>s+r.amount,0);
+  const cc=list.filter(r=>chanClass(r.channel)==='d-cc').reduce((s,r)=>s+r.amount,0);
+
+  $('todayLabel').textContent = day===todayISO() ? 'TODAY' : day;
+  $('sum').textContent=money(total);
+  $('cnt').textContent=list.length;
+  $('tQr').textContent=money(qr);
+  $('tCc').textContent=money(cc);
+
+  const t=$('tbl');
+  if(!list.length){ t.innerHTML='<tr><td class="empty">No entries for this day.</td></tr>'; return; }
+  t.innerHTML='<tr><th>Time</th><th>Method</th><th class="r">Amount</th><th></th></tr>' +
+    list.map(r=>`<tr>
+      <td class="num">${esc(r.time)}</td>
+      <td><span class="tag"><i class="dot ${chanClass(r.channel)}"></i>${esc(r.channel)}</span></td>
+      <td class="r">${money(r.amount)}</td>
+      <td class="r"><button class="del" data-del="${esc(r.id)}">Del</button></td>
+    </tr>`).join('');
+  t.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>delRow(b.dataset.del));
+}
+
+/* ─────────────── report ─────────────── */
+function setPeriod(p){
+  period=p;
+  document.querySelectorAll('#segPeriod button').forEach(b=>b.classList.toggle('on',b.dataset.p===p));
+  $('customWrap').hidden = p!=='custom';
+  $('anchorWrap').hidden = p==='custom';
+  $('anchorLbl').textContent = p==='daily'?'Day':p==='weekly'?'Week containing':'Month';
+  applyAnchor();
+}
+
+function range(){
+  if(period==='custom'){
+    let a=$('from').value||todayISO(), b=$('to').value||todayISO();
+    if(a>b){ const t=a; a=b; b=t; }
+    return [a,b];
+  }
+  const anc=$('anchor').value||todayISO();
+  if(period==='daily') return [anc,anc];
+  if(period==='weekly'){
+    const d=parseISO(anc); const s=addDays(anc,-d.getDay());
+    return [s, addDays(s,6)];
+  }
+  const d=parseISO(anc);
+  const s=new Date(d.getFullYear(),d.getMonth(),1);
+  const e=new Date(d.getFullYear(),d.getMonth()+1,0);
+  return [localISO(s),localISO(e)];
+}
+
+function applyAnchor(){
+  const [a,b]=range();
+  const days=dayDiff(a,b)+1;
+  $('rangeNote').textContent = a===b ? a : `${a} → ${b} · ${days} day${days>1?'s':''}`;
+}
+
+function renderDash(){
+  const [a,b]=range();
+  const list=rows.filter(r=>r.date>=a && r.date<=b);
+  const days=dayDiff(a,b)+1;
+  const total=list.reduce((s,r)=>s+r.amount,0);
+
+  $('repBody').hidden=false;
+  $('repTitle').textContent = period[0].toUpperCase()+period.slice(1)+' report';
+  $('repRange').textContent = a===b?a:`${a} → ${b}`;
+  $('kTotal').textContent=money(total);
+  $('kCount').textContent=list.length;
+  $('kAvg').textContent=money(list.length?total/list.length:0);
+  $('kDay').textContent=money(total/days);
+
+  // series by day (or by hour when the range is a single day)
+  const byDay={}; for(let i=0;i<days;i++) byDay[addDays(a,i)]=0;
+  list.forEach(r=>{ if(byDay[r.date]!=null) byDay[r.date]+=r.amount; });
+  const labels=Object.keys(byDay);
+  const vals=labels.map(k=>byDay[k]);
+  const shortLbl = labels.map(k=>days>31 ? k.slice(5) : k.slice(8));
+
+  const best=vals.reduce((m,v,i)=>v>vals[m]?i:m,0);
+  $('bestNote').textContent = vals[best]>0 ? `peak ${labels[best].slice(5)} · ${money(vals[best])}` : '';
+
+  drawBar('c1', shortLbl, vals);
+
+  // hour histogram
+  const byHour=new Array(24).fill(0);
+  list.forEach(r=>{ const h=parseInt(String(r.time).slice(0,2),10); if(h>=0&&h<24) byHour[h]+=r.amount; });
+  const ph=byHour.reduce((m,v,i)=>v>byHour[m]?i:m,0);
+  $('peakNote').textContent = byHour[ph]>0 ? `busiest ${pad(ph)}:00` : '';
+  drawBar('c2', byHour.map((_,i)=>pad(i)), byHour);
+
+  // payment mix
+  const mix={};
+  list.forEach(r=>{ mix[r.channel]=(mix[r.channel]||0)+r.amount; });
+  const mixKeys=Object.keys(mix).sort((x,y)=>mix[y]-mix[x]);
+  $('tCh').innerHTML = mixKeys.length
+    ? '<tr><th>Method</th><th class="r">Amount</th><th class="r">Share</th></tr>' +
+      mixKeys.map(k=>`<tr>
+        <td><span class="tag"><i class="dot ${chanClass(k)}"></i>${esc(k)}</span></td>
+        <td class="r">${money(mix[k])}</td>
+        <td class="r">${total?Math.round(mix[k]/total*100):0}%</td></tr>`).join('')
+    : '<tr><td class="empty">Nothing in this range.</td></tr>';
+
+  // breakdown
+  $('tPeriod').innerHTML = labels.some((_,i)=>vals[i]>0)
+    ? '<tr><th>Date</th><th class="r">Slips</th><th class="r">Amount</th></tr>' +
+      labels.map((k,i)=>{
+        const c=list.filter(r=>r.date===k).length;
+        return vals[i]||c ? `<tr><td class="num">${k}</td><td class="r">${c}</td><td class="r">${money(vals[i])}</td></tr>` : '';
+      }).join('')
+    : '<tr><td class="empty">Nothing in this range.</td></tr>';
+}
+
+function drawBar(id,labels,data){
+  if(charts[id]) charts[id].destroy();
+  charts[id]=new Chart($(id),{
+    type:'bar',
+    data:{labels,datasets:[{data,backgroundColor:'#12100E',borderRadius:2,barPercentage:.72}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>money(c.parsed.y)}}},
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#A9A399',font:{size:9},maxRotation:0,autoSkipPadding:12}},
+        y:{border:{display:false},grid:{color:'#F1EDE5'},
+           ticks:{color:'#A9A399',font:{size:9},callback:v=>v>=1000?(v/1000)+'k':v}}
+      }}
+  });
+}
+
+function exportCSV(){
+  const [a,b]=range();
+  const list=rows.filter(r=>r.date>=a&&r.date<=b).sort((x,y)=>(x.date+x.time).localeCompare(y.date+y.time));
+  const q=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`;
+  const csv=['Date,Time,Method,Amount,Reference']
+    .concat(list.map(r=>[q(r.date),q(r.time),q(r.channel),r.amount,q(r.ref)].join(',')))
+    .join('\r\n');
+  const url=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
+  const a2=document.createElement('a');
+  a2.href=url; a2.download=`slips_${a}_${b}.csv`; a2.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+/* ─────────────── settings ─────────────── */
+function renderSettings(){
+  $('s-conc').value=cfg.conc; $('s-gap').value=cfg.gap;
+  $('dCount').textContent=rows.length;
+  const ds=rows.map(r=>r.date).sort();
+  $('dFirst').textContent=ds[0]||'—';
+  $('dLast').textContent=ds[ds.length-1]||'—';
+  renderPace();
+}
+
+function renderPace(){
+  const perMin = cfg.gap>0 ? Math.round(60000/cfg.gap) : 60;
+  const mins = n => { const m=(n*cfg.gap)/60000; return m<1?'under a minute':`about ${Math.ceil(m)} min`; };
+  $('paceTbl').innerHTML =
+    `<tr><td>Requests per minute</td><td class="r num">${cfg.gap>0?'~'+perMin:'unthrottled'}</td></tr>
+     <tr><td>50 slips</td><td class="r num">${mins(50)}</td></tr>
+     <tr><td>200 slips</td><td class="r num">${mins(200)}</td></tr>`;
+}
+
+function saveSettings(){
+  const c=Math.max(1,Math.min(8,Number($('s-conc').value)||DEFAULTS.conc));
+  const g=Math.max(0,Math.min(10000,Number($('s-gap').value)||0));
+  cfg={conc:c,gap:g};
+  localStorage.setItem('slipCfg',JSON.stringify(cfg));
+  $('s-conc').value=c; $('s-gap').value=g;
+  renderPace();
+  $('setmsg').className='msg ok'; $('setmsg').textContent='Settings saved.';
+  setTimeout(()=>$('setmsg').textContent='',2500);
+}
+
+/* ─────────────── boot ─────────────── */
+(function init(){
+  const now=new Date();
+  $('m-date').value=todayISO();
+  $('m-time').value=pad(now.getHours())+':'+pad(now.getMinutes());
+  $('pickDay').value=todayISO();
+  $('anchor').value=todayISO();
+  $('from').value=addDays(todayISO(),-6);
+  $('to').value=todayISO();
+  applyAnchor();
+
+  if(token){
+    $('lock').hidden=true;
+    refresh().then(()=>go('scan'));
+  }
+})();
+</script>
+</body>
+</html>
