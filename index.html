@@ -12,6 +12,17 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
+<script>
+window.addEventListener('error', function(e){
+  var el=document.getElementById('lockmsg');
+  if(el) el.textContent='Script error: '+(e.message||'')+' @'+(e.lineno||'?');
+});
+window.addEventListener('unhandledrejection', function(e){
+  var el=document.getElementById('lockmsg');
+  var r=e.reason;
+  if(el) el.textContent='Unhandled: '+((r&&r.message)?r.message:String(r));
+});
+</script>
 <script src="chart.umd.js"></script>
 <style>
 :root{
@@ -164,6 +175,7 @@ a{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
     </svg>
     <h1>Slip Ledger</h1>
     <p class="sub">Enter your passcode to continue.</p>
+    <p class="sub num" style="font-size:11px;color:var(--faint);margin:-20px 0 22px">build 2026-07-19b</p>
     <label for="pw">Passcode</label>
     <input type="password" id="pw" autocomplete="current-password"
            onkeydown="if(event.key==='Enter')unlock()">
@@ -504,12 +516,12 @@ async function unlock(){
     store('slipToken',pw);
     $('lockmsg').textContent=''; $('pw').value='';
     $('lock').hidden=true;
-    await refresh();
     go('scan');
+    refresh();
   }catch(err){
-    token='';
-    $('lock').hidden=false;
-    $('lockmsg').textContent='Sign-in failed: ' + (err && err.message ? err.message : String(err));
+    const m = err && err.message ? err.message : String(err);
+    $('lockmsg').textContent='Sign-in failed: ' + m;
+    console.error('[unlock]', err);
   }finally{
     btn.disabled=false;
   }
